@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Chipping Challenge AR</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    height: 100dvh;
+    overflow: hidden;
+    color: white;
+    user-select: none;
+  }
+
+  #app {
+    position: relative;
+    width: 100vw;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Camera feed ── */
+  #video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  #canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  /* ── Start screen ── */
+  #start-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #0d1f12 0%, #0a0a0a 100%);
+    z-index: 100;
+    gap: 12px;
+    padding: 32px;
+  }
+
+  .logo {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    margin-bottom: 8px;
+    box-shadow: 0 8px 32px rgba(34,197,94,0.3);
+  }
+
+  #start-screen h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  #start-screen p {
+    font-size: 15px;
+    color: #6b7280;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 280px;
+  }
+
+  .btn-primary {
+    margin-top: 16px;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    padding: 16px 40px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(34,197,94,0.4);
+    transition: transform 0.1s, box-shadow 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-primary:active { transform: scale(0.97); box-shadow: 0 2px 10px rgba(34,197,94,0.3); }
+
+  /* ── Top HUD ── */
+  #hud-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 52px 16px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+    z-index: 10;
+  }
+
+  .hud-pill {
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+  }
+
+  .hud-pill.green {
+    background: rgba(34,197,94,0.25);
+    border-color: rgba(34,197,94,0.5);
+    color: #4ade80;
+  }
+
+  .hud-pill.amber {
+    background: rgba(251,191,36,0.2);
+    border-color: rgba(251,191,36,0.5);
+    color: #fbbf24;
+  }
+
+  /* ── Instruction bar ── */
+  #instruction {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+
+  /* ── Crosshair ── */
+  #crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    pointer-events: none;
+    z-index: 9;
+  }
+
+  #crosshair::before, #crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255,255,255,0.8);
+  }
+  #crosshair::before {
+    width: 2px; height: 100%;
+    left: 50%; transform: translateX(-50%);
+  }
+  #crosshair::after {
+    height: 2px; width: 100%;
+    top: 50%; transform: translateY(-50%);
+  }
+
+  .crosshair-ring {
+    position: absolute;
+    inset: 8px;
+    border: 2px solid rgba(255,255,255,0.6);
+    border-radius: 50%;
+  }
+
+  /* ── Bottom panel ── */
+  #panel-bottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 16px 16px 40px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+    z-index: 10;
+  }
+
+  /* ── Ball list ── */
+  #ball-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .ball-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 10px 14px;
+    animation: slideUp 0.2s ease;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ball-num {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .ball-label { font-size: 13px; color: #9ca3af; flex: 1; }
+
+  .ball-dist {
+    font-size: 17px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: -0.3px;
+  }
+
+  .ball-dist span { font-size: 12px; font-weight: 500; color: #6b7280; margin-left: 2px; }
+
+  .ball-sg {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 8px;
+  }
+  .ball-sg.pos { background: rgba(34,197,94,0.2); color: #4ade80; }
+  .ball-sg.neg { background: rgba(239,68,68,0.2); color: #f87171; }
+  .ball-sg.neu { background: rgba(156,163,175,0.2); color: #9ca3af; }
+
+  /* ── Action buttons ── */
+  .btn-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-action {
+    flex: 1;
+    border: none;
+    border-radius: 14px;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s, opacity 0.1s;
+  }
+  .btn-action:active { transform: scale(0.97); opacity: 0.85; }
+
+  .btn-lock {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+  }
+
+  .btn-ball {
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    color: white;
+  }
+
+  .btn-reset {
+    background: rgba(239,68,68,0.15);
+    border: 1px solid rgba(239,68,68,0.3) !important;
+    color: #f87171;
+    flex: 0 0 auto;
+    padding: 14px 18px;
+  }
+
+  .btn-action:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  /* ── Scale notice ── */
+  #scale-notice {
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  /* ── Hole locked flash ── */
+  #lock-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(34,197,94,0.15);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 8;
+    transition: opacity 0.05s;
+  }
+
+  /* ── Summary screen ── */
+  #summary {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(160deg, #0d1f12 0%, #0a0a0a 100%);
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    padding: 52px 20px 40px;
+    overflow-y: auto;
+  }
+
+  #summary h2 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  #summary .subtitle {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 24px;
+  }
+
+  .summary-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .summary-card h3 {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .sg-total {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -2px;
+  }
+
+  .sg-total.pos { color: #4ade80; }
+  .sg-total.neg { color: #f87171; }
+  .sg-total.neu { color: #9ca3af; }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .summary-row:last-child { border-bottom: none; }
+
+  .summary-row .label { font-size: 14px; color: #9ca3af; }
+  .summary-row .value { font-size: 15px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Camera -->
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div id="lock-flash"></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair">
+    <div class="crosshair-ring"></div>
+  </div>
+
+  <!-- Top HUD -->
+  <div id="hud-top">
+    <div class="hud-pill" id="hud-mode">📍 Aim at hole</div>
+    <div class="hud-pill" id="hud-count">0 / 9 balls</div>
+  </div>
+
+  <!-- Instruction -->
+  <div id="instruction">Aim crosshair at the hole</div>
+
+  <!-- Bottom panel -->
+  <div id="panel-bottom">
+    <div id="ball-list"></div>
+    <div class="btn-row">
+      <button class="btn-action btn-lock" id="btn-lock">🏌️ Lock Hole</button>
+      <button class="btn-action btn-ball" id="btn-ball" disabled>⛳ Mark Ball</button>
+      <button class="btn-action btn-reset btn-action" id="btn-reset" style="display:none">↺</button>
+    </div>
+    <div id="scale-notice">POC mode — distances estimated from pixel offset × scale factor</div>
+  </div>
+
+  <!-- Start screen -->
+  <div id="start-screen">
+    <div class="logo">⛳</div>
+    <h1>Chipping Challenge</h1>
+    <p>Point your camera at the hole, lock it, then mark each ball to measure distances instantly.</p>
+    <button class="btn-primary" id="btn-start">Start Measuring</button>
+  </div>
+
+  <!-- Summary -->
+  <div id="summary">
+    <h2>Round Summary</h2>
+    <p class="subtitle" id="summary-subtitle"></p>
+    <div class="summary-card">
+      <h3>Total Strokes Gained</h3>
+      <div class="sg-total" id="sg-total-display">+0.0</div>
+    </div>
+    <div class="summary-card" id="summary-balls"></div>
+    <button class="btn-primary" id="btn-new-round" style="width:100%;margin-top:8px">New Round</button>
+  </div>
+
+</div>
+
+<script>
+// ── State ──
+const state = {
+  phase: 'idle',        // idle | locking | locked | done
+  holePixel: null,      // {x, y} on canvas
+  balls: [],            // [{x, y, dist, sg}]
+  scaleFactor: 0.08,    // yards per pixel (tunable — will be LiDAR depth later)
+};
+
+// Strokes gained baseline from hole (expected putts remaining, PGA Tour averages)
+// key = upper bound in feet, value = expected strokes to hole out
+const SG_TABLE = [
+  { maxFt: 1,   exp: 1.00 },
+  { maxFt: 2,   exp: 1.03 },
+  { maxFt: 3,   exp: 1.08 },
+  { maxFt: 4,   exp: 1.15 },
+  { maxFt: 5,   exp: 1.20 },
+  { maxFt: 6,   exp: 1.25 },
+  { maxFt: 9,   exp: 1.35 },
+  { maxFt: 12,  exp: 1.45 },
+  { maxFt: 18,  exp: 1.58 },
+  { maxFt: 24,  exp: 1.68 },
+  { maxFt: 36,  exp: 1.80 },
+  { maxFt: 60,  exp: 1.90 },
+  { maxFt: Infinity, exp: 1.95 },
+];
+
+// Tour avg strokes to get up and down from X yards (chipping baseline)
+// This is what you "spent" to hit the chip — typically 1 stroke (the chip) + expected putts from avg result
+const CHIP_BASELINE = {
+  5:  2.40,   // 1 chip + 1.40 expected putts (avg tour result from 5 yds)
+  10: 2.52,
+  15: 2.60,
+  20: 2.68,
+};
+
+function getExpectedPutts(distFt) {
+  for (const row of SG_TABLE) {
+    if (distFt <= row.maxFt) return row.exp;
+  }
+  return 1.95;
+}
+
+function calcSG(distYards) {
+  const distFt = distYards * 3;
+  // SG chipping = baseline strokes from challenge distance − (1 chip + expected putts from result)
+  // Simplified: positive = better than tour avg
+  const expectedPutts = getExpectedPutts(distFt);
+  const totalStrokes = 1 + expectedPutts; // 1 chip + putts
+  // Use nearest baseline (default 5 yard challenge for POC)
+  const baseline = 2.40;
+  return +(baseline - totalStrokes).toFixed(2);
+}
+
+// ── Elements ──
+const video      = document.getElementById('video');
+const canvas     = document.getElementById('canvas');
+const ctx        = canvas.getContext('2d');
+const btnStart   = document.getElementById('btn-start');
+const btnLock    = document.getElementById('btn-lock');
+const btnBall    = document.getElementById('btn-ball');
+const btnReset   = document.getElementById('btn-reset');
+const btnNewRound= document.getElementById('btn-new-round');
+const instruction= document.getElementById('instruction');
+const hudMode    = document.getElementById('hud-mode');
+const hudCount   = document.getElementById('hud-count');
+const ballList   = document.getElementById('ball-list');
+const lockFlash  = document.getElementById('lock-flash');
+const startScreen= document.getElementById('start-screen');
+const summary    = document.getElementById('summary');
+
+// ── Camera ──
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      resizeCanvas();
+      startScreen.style.display = 'none';
+      state.phase = 'locking';
+      draw();
+    };
+  } catch(e) {
+    // Fallback for desktop/no camera (POC demo mode)
+    startScreen.style.display = 'none';
+    state.phase = 'locking';
+    canvas.style.background = 'linear-gradient(135deg, #1a2e1a 0%, #0d1a0d 100%)';
+    resizeCanvas();
+    draw();
+    document.getElementById('scale-notice').textContent = '⚠️ No camera — demo mode with simulated background';
+  }
+}
+
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// ── Drawing ──
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (state.holePixel) {
+    drawHoleMarker(state.holePixel.x, state.holePixel.y);
+  }
+
+  state.balls.forEach((ball, i) => {
+    drawBallMarker(ball.x, ball.y, i + 1);
+    if (state.holePixel) {
+      drawDistanceLine(state.holePixel, ball, i);
+    }
+  });
+
+  requestAnimationFrame(draw);
+}
+
+function drawHoleMarker(x, y) {
+  // Outer ring
+  ctx.beginPath();
+  ctx.arc(x, y, 22, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Green fill
+  ctx.beginPath();
+  ctx.arc(x, y, 16, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(34,197,94,0.85)';
+  ctx.fill();
+
+  // Flag emoji-style pin
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 14px -apple-system';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('⛳', x, y);
+
+  // Label
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 11px -apple-system';
+  ctx.fillText('HOLE', x, y + 28);
+}
+
+function drawBallMarker(x, y, num) {
+  // Shadow
+  ctx.beginPath();
+  ctx.arc(x, y + 2, 14, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fill();
+
+  // White ball
+  ctx.beginPath();
+  ctx.arc(x, y, 13, 0, Math.PI * 2);
+  ctx.fillStyle = 'white';
+  ctx.fill();
+
+  // Number
+  ctx.fillStyle = '#166534';
+  ctx.font = 'bold 12px -apple-system';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(num, x, y);
+}
+
+function drawDistanceLine(hole, ball, idx) {
+  const colors = ['#4ade80','#60a5fa','#f472b6','#fb923c','#a78bfa','#34d399','#fbbf24','#f87171','#818cf8'];
+  const color = colors[idx % colors.length];
+
+  ctx.beginPath();
+  ctx.moveTo(hole.x, hole.y);
+  ctx.lineTo(ball.x, ball.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.globalAlpha = 0.7;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // Distance label at midpoint
+  const mx = (hole.x + ball.x) / 2;
+  const my = (hole.y + ball.y) / 2;
+  const dist = ball.dist;
+  const label = dist < 3 ? `${(dist * 3).toFixed(1)}ft` : `${dist.toFixed(1)}yds`;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  const tw = ctx.measureText(label).width;
+  ctx.beginPath();
+  ctx.roundRect(mx - tw/2 - 6, my - 11, tw + 12, 22, 6);
+  ctx.fill();
+
+  ctx.fillStyle = color;
+  ctx.font = 'bold 12px -apple-system';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, mx, my);
+}
+
+// ── Flash effect on lock ──
+function flashGreen() {
+  lockFlash.style.opacity = '1';
+  setTimeout(() => { lockFlash.style.opacity = '0'; }, 200);
+}
+
+// ── Get canvas coords from touch/click ──
+function getCanvasXY(e) {
+  const rect = canvas.getBoundingClientRect();
+  if (e.touches) {
+    return {
+      x: e.touches[0].clientX - rect.left,
+      y: e.touches[0].clientY - rect.top
+    };
+  }
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+// ── Pixel distance → yards ──
+function pixelsToYards(px) {
+  return px * state.scaleFactor;
+}
+
+function distPx(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+// ── UI update ──
+function updateUI() {
+  hudCount.textContent = `${state.balls.length} / 9 balls`;
+
+  if (state.phase === 'locking') {
+    instruction.textContent = 'Aim crosshair at the hole';
+    instruction.style.opacity = '1';
+    hudMode.textContent = '📍 Aim at hole';
+    hudMode.className = 'hud-pill';
+    btnLock.disabled = false;
+    btnBall.disabled = true;
+    btnReset.style.display = 'none';
+    document.getElementById('crosshair').style.display = 'block';
+  } else if (state.phase === 'locked') {
+    instruction.style.opacity = '0';
+    hudMode.textContent = '✅ Hole locked';
+    hudMode.className = 'hud-pill green';
+    btnLock.disabled = true;
+    btnBall.disabled = state.balls.length >= 9;
+    btnReset.style.display = 'flex';
+    document.getElementById('crosshair').style.display = 'none';
+  }
+
+  // Rebuild ball list
+  ballList.innerHTML = '';
+  state.balls.forEach((ball, i) => {
+    const distFt = ball.dist * 3;
+    const distLabel = distFt < 12 ? `${distFt.toFixed(1)} ft` : `${ball.dist.toFixed(1)} yds`;
+    const sgClass = ball.sg > 0 ? 'pos' : ball.sg < 0 ? 'neg' : 'neu';
+    const sgLabel = ball.sg > 0 ? `+${ball.sg}` : `${ball.sg}`;
+
+    const row = document.createElement('div');
+    row.className = 'ball-row';
+    row.innerHTML = `
+      <div class="ball-num">${i+1}</div>
+      <div class="ball-label">Ball ${i+1}</div>
+      <div class="ball-dist">${distLabel}</div>
+      <div class="ball-sg ${sgClass}">${sgLabel} SG</div>
+    `;
+    ballList.appendChild(row);
+  });
+
+  if (state.balls.length === 9) {
+    setTimeout(showSummary, 600);
+  }
+}
+
+// ── Lock hole (centre of screen) ──
+btnLock.addEventListener('click', () => {
+  state.holePixel = { x: canvas.width / 2, y: canvas.height / 2 };
+  state.phase = 'locked';
+  flashGreen();
+  updateUI();
+});
+
+// ── Mark ball (centre of screen) ──
+btnBall.addEventListener('click', () => {
+  if (!state.holePixel || state.balls.length >= 9) return;
+
+  // In POC: ball is placed at a random-ish offset from centre to simulate user panning
+  // In real app: ball is wherever crosshair is when user taps
+  const angle = Math.random() * Math.PI * 2;
+  const px = 60 + Math.random() * 180; // random pixel distance 60–240px
+  const bx = state.holePixel.x + Math.cos(angle) * px;
+  const by = state.holePixel.y + Math.sin(angle) * px;
+
+  const distPixels = distPx(state.holePixel, { x: bx, y: by });
+  const distYards = pixelsToYards(distPixels);
+  const sg = calcSG(distYards);
+
+  state.balls.push({ x: bx, y: by, dist: distYards, sg });
+  updateUI();
+});
+
+// ── Reset ──
+btnReset.addEventListener('click', () => {
+  state.phase = 'locking';
+  state.holePixel = null;
+  state.balls = [];
+  document.getElementById('crosshair').style.display = 'block';
+  updateUI();
+});
+
+// ── Start ──
+btnStart.addEventListener('click', startCamera);
+
+// ── New round ──
+btnNewRound.addEventListener('click', () => {
+  summary.style.display = 'none';
+  state.phase = 'locking';
+  state.holePixel = null;
+  state.balls = [];
+  document.getElementById('crosshair').style.display = 'block';
+  updateUI();
+});
+
+// ── Summary ──
+function showSummary() {
+  const totalSG = state.balls.reduce((s, b) => s + b.sg, 0).toFixed(2);
+  const avgDist = (state.balls.reduce((s,b) => s + b.dist * 3, 0) / state.balls.length).toFixed(1);
+  const best = state.balls.reduce((a,b) => a.dist < b.dist ? a : b);
+
+  document.getElementById('summary-subtitle').textContent = `9 balls · ${new Date().toLocaleDateString('en-GB', {day:'numeric',month:'short'})}`;
+
+  const sgNum = parseFloat(totalSG);
+  const sgEl = document.getElementById('sg-total-display');
+  sgEl.textContent = sgNum >= 0 ? `+${totalSG}` : totalSG;
+  sgEl.className = 'sg-total ' + (sgNum > 0 ? 'pos' : sgNum < 0 ? 'neg' : 'neu');
+
+  const summaryBalls = document.getElementById('summary-balls');
+  summaryBalls.innerHTML = '<h3>Ball Breakdown</h3>';
+  state.balls.forEach((b,i) => {
+    const distFt = b.dist * 3;
+    const label = distFt < 12 ? `${distFt.toFixed(1)} ft` : `${b.dist.toFixed(1)} yds`;
+    const sgClass = b.sg > 0 ? 'pos' : b.sg < 0 ? 'neg' : 'neu';
+    summaryBalls.innerHTML += `
+      <div class="summary-row">
+        <span class="label">Ball ${i+1}</span>
+        <span class="value">${label}</span>
+        <span class="ball-sg ${sgClass}">${b.sg >= 0 ? '+' : ''}${b.sg} SG</span>
+      </div>`;
+  });
+  summaryBalls.innerHTML += `
+    <div class="summary-row">
+      <span class="label">Avg distance</span>
+      <span class="value">${avgDist} ft</span>
+    </div>
+    <div class="summary-row">
+      <span class="label">Best ball</span>
+      <span class="value">${(best.dist*3).toFixed(1)} ft</span>
+    </div>`;
+
+  summary.style.display = 'flex';
+}
+
+// ── Init ──
+resizeCanvas();
+draw();
+updateUI();
+</script>
+</body>
+</html>
